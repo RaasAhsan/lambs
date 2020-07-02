@@ -1,6 +1,7 @@
 
 object Main {
   
+  // Representation of the abstract syntax tree.
   enum Term derives Eql {
     case TmInt(x: Int)
     case TmAdd(t1: Term, t2: Term)

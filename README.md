@@ -6,10 +6,11 @@ I'm also using this playground as an opportunity to try out the Dotty compiler.
 
 TODO:
 - user-defined nominal types
-- records
+- records/structs
 - variants
 - arrays
 - mutability
 - function abstraction and application
 - parametric polymorphism
 - type annotations
+- type inference/reconstruction
