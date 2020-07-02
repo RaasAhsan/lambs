@@ -24,6 +24,8 @@ object Main {
     case TyUnit
   }
   
+  // A typing context holds type information for free variables in a term.
+  // The scope of a binding is the body of an abstraction.
   opaque type Context = Map[String, Type]
   
   object Context {
