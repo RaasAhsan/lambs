@@ -1,6 +1,6 @@
 # lambs
 
-![build](https://github.com/RaasAhsan/lambs/workflows/Scala%20CI/badge.svg)
+![Scala CI](https://github.com/RaasAhsan/lambs/workflows/Scala%20CI/badge.svg)
 
 A playground for building a statically checked type system based on the lambda calculus. There is merely a definition for an abstract syntax tree and a corresponding type checking function. It would be straightforward to define and implement the operational semantics for the language, but that falls outside the scope of the project. No lexing, parsing, or code generation is performed either. 
 
