@@ -27,6 +27,11 @@ class TypeCheckTests extends AnyFunSuite with Matchers {
     val t = TmAbs("x", TyInt, TmVar("y"))
     typecheck(t, ctx) shouldBe a [TypeCheckFail]
   }
+  
+  test("TmAbs is ill-typed if a binding already exists for a name") {
+    val t = TmAbs("x", TyInt, TmAbs("x", TyInt, TmVar("x")))
+    typecheck(t, ctx) shouldBe a [TypeCheckFail]
+  }
 
   test("TmApp types to return type of left hand side abstraction") {
     val t = TmApp(TmAbs("x", TyInt, TmVar("x")), TmInt(10))

@@ -46,6 +46,7 @@ object Main {
     case Term.TmAbs(name, ty, t) => 
       val ctx0 = ctx.add(name, ty)
       for {
+        _   <- ctx.get(name).fold(Right(()))(_ => Left(s"existing binding found for $name"))
         ty2 <- typecheck(t, ctx0) 
       } yield Type.TyFunc(ty, ty2)
     case Term.TmApp(t1, t2) =>
