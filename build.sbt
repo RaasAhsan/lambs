@@ -1,10 +1,12 @@
 lazy val root = project
   .in(file("."))
   .settings(
-    name := "dotty-simple",
+    name := "lambs",
     version := "0.1.0",
 
     scalaVersion := "0.24.0-RC1",
 
-    libraryDependencies += "com.novocode" % "junit-interface" % "0.11" % "test"
+    libraryDependencies ++= Seq(
+      "org.scalatest" % "scalatest_0.24" % "3.2.0" % "test"
+    )
   )

@@ -5,7 +5,6 @@ A playground for building a statically checked type system based on the lambda c
 I'm also using this playground as an opportunity to try out the Dotty compiler.
 
 TODO:
-- unit type
 - user-defined nominal types
 - records
 - variants
