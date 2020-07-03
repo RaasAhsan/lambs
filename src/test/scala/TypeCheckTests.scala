@@ -7,7 +7,7 @@ class TypeCheckTests extends AnyFunSuite with Matchers {
   import Term._
   import Type._
   
-  val ctx = Context() // empty context
+  val ctx = TypingContext() // empty context
   type TypeCheckFail = Left[String, Unit]
   
   // TODO: Introduce property-based tests
@@ -126,5 +126,22 @@ class TypeCheckTests extends AnyFunSuite with Matchers {
   test("TmUnit types to TyUnit") {
     val t = TmUnit
     typecheck(t, ctx) shouldBe Right(TyUnit)
+  }
+  
+  test("TmTuple types to TyTuple") {
+    val t = TmTuple(List(TmInt(10), TmTrue, TmFalse))
+    typecheck(t, ctx) shouldBe Right(TyTuple(List(TyInt, TyBool, TyBool)))
+  }
+  
+  test("TmTupleProj types to the corresponding type") {
+    val t = TmTupleProj(TmTuple(List(TmInt(10), TmTrue, TmFalse)), 2)
+    typecheck(t, ctx) shouldBe Right(TyBool)
+  }
+
+  // with derived forms over structs, this is captured by a name
+  // that doesn't exist
+  test("TmTupleProj is ill-typed if an invalid index is accessed") {
+    val t = TmTupleProj(TmTuple(List(TmInt(10), TmTrue, TmFalse)), 4)
+    typecheck(t, ctx) shouldBe a [TypeCheckFail]
   }
 }

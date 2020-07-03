@@ -23,41 +23,50 @@ object Main {
     case ENot(t1: ETerm)
     case EIf(t1: ETerm, t2: ETerm, t3: ETerm)
     case EUnit
+    case ETuple(ts: List[ETerm])
+    case ETupleProj(t: ETerm, idx: Int)
       
     // derived forms
     case ESeq(t1: ETerm, t2: ETerm)
 
     import Term._
 
-    def translate: Term =
-      this match {
-        case EVar(name) => 
-          TmVar(name)
-        case EAbs(name, ty, t) => 
-          TmAbs(name, ty, t.translate)
-        case EApp(t1, t2) => 
-          TmApp(t1.translate, t2.translate)
-        case EInt(x) => 
-          TmInt(x)
-        case EAdd(t1, t2) => 
-          TmAdd(t1.translate, t2.translate)
-        case ETrue => 
-          TmTrue
-        case EFalse => 
-          TmFalse
-        case EAnd(t1, t2) => 
-          TmAnd(t1.translate, t2.translate)
-        case EOr(t1, t2) => 
-          TmOr(t1.translate, t2.translate)
-        case ENot(t1) => 
-          TmNot(t1.translate)
-        case EIf(t1, t2, t3) => 
-          TmIf(t1.translate, t2.translate, t3.translate)
-        case EUnit => 
-          TmUnit
-        case ESeq(t1, t2) => 
-          TmApp(Term.TmAbs(VarBinding.None, Type.TyUnit, t2.translate), t1.translate)
-      }
+    // Introduce translate context?
+    def translate: Term = this match {
+      case EVar(name) => 
+        TmVar(name)
+      case EAbs(name, ty, t) => 
+        TmAbs(name, ty, t.translate)
+      case EApp(t1, t2) => 
+        TmApp(t1.translate, t2.translate)
+      case EInt(x) => 
+        TmInt(x)
+      case EAdd(t1, t2) => 
+        TmAdd(t1.translate, t2.translate)
+      case ETrue => 
+        TmTrue
+      case EFalse => 
+        TmFalse
+      case EAnd(t1, t2) => 
+        TmAnd(t1.translate, t2.translate)
+      case EOr(t1, t2) => 
+        TmOr(t1.translate, t2.translate)
+      case ENot(t1) => 
+        TmNot(t1.translate)
+      case EIf(t1, t2, t3) => 
+        TmIf(t1.translate, t2.translate, t3.translate)
+      case EUnit => 
+        TmUnit
+      case ETuple(ts) => 
+        TmTuple(ts.map(_.translate))
+      case ETupleProj(t, idx) =>
+        TmTupleProj(t.translate, idx)  
+      
+      // desugar derived forms
+      // only one pass for desugaring  
+      case ESeq(t1, t2) => 
+        TmApp(Term.TmAbs(VarBinding.None, Type.TyUnit, t2.translate), t1.translate)
+    }
   }
   
   // Representation of the internal abstract syntax tree.
@@ -75,6 +84,11 @@ object Main {
     case TmNot(t1: Term)
     case TmIf(t1: Term, t2: Term, t3: Term)
     case TmUnit
+    // Tuples and tuple projections can be expressed as derived forms of records or classes.
+    // This is exactly what Scala does; TupleN classes are defined as part of the standard library
+    // and the (x, y, ...) syntactic form is the target of desugaring. 
+    case TmTuple(ts: List[Term])
+    case TmTupleProj(t: Term, idx: Int)
   }
   
   enum Type derives Eql {
@@ -82,6 +96,7 @@ object Main {
     case TyInt
     case TyBool
     case TyUnit
+    case TyTuple(tys: List[Type])
   }
   
   enum VarBinding {
@@ -89,27 +104,28 @@ object Main {
     case None
   }
 
-  // A typing context holds type information for free variables in a term.
-  // The scope of a binding is the body of an abstraction.
+  // A typing context holds assumptions about the types of free variables in a term.
+  // The scope of a binding is the body of an abstraction, so the typing context
+  // holds bindings for all the enclosing abstractions for a particular term.
   // We are using a symbolic name to uniquely identify variables as opposed
   // to their de Bruijn indexes, which are arguably more useful during evaluation.
-  opaque type Context = Map[String, Type]
+  opaque type TypingContext = Map[String, Type]
 
-  object Context {
-    def apply(): Context = Map()
+  object TypingContext {
+    def apply(): TypingContext = Map()
   }
 
-  extension contextOps on (ctx: Context) {
+  extension contextOps on (ctx: TypingContext) {
     def get(name: String): Option[Type] =
       ctx.get(name)
 
-    def add(name: String, ty: Type): Context =
+    def add(name: String, ty: Type): TypingContext =
       ctx + (name -> ty)
   }
   
   // Each case arm captures an inference rule in the typing relation.
   // Premises are checked, and the return value reflects the conclusion.
-  def typecheck(term: Term, ctx: Context): Either[String, Type] = term match {
+  def typecheck(term: Term, ctx: TypingContext): Either[String, Type] = term match {
     case Term.TmVar(name) =>
       ctx.get(name).fold(Left(s"no type binding found for $name"))(Right.apply)
     case Term.TmAbs(name, ty, t) =>
@@ -161,9 +177,29 @@ object Main {
         _   <- typesMatch(ty2, ty3)
       } yield ty2
     case Term.TmUnit => Right(Type.TyUnit)
+    case Term.TmTuple(ts) =>
+      ts
+        .map(t => typecheck(t, ctx))
+        .foldRight[Either[String, List[Type]]](Right(Nil))((e, acc) => acc match {
+          case Right(tys) => e.map(_ :: tys)
+          case Left(_) => acc
+        })
+        .map(Type.TyTuple.apply)
+    case Term.TmTupleProj(t, idx) =>
+      for {
+        ty  <- typecheck(t, ctx)
+        tty <- ty match {
+          case Type.TyTuple(tys) => Right(tys)
+          case _ => Left(s"left hand of tuple projection is not a tuple. $t: $ty")
+        }
+        pty <- tty.lift(idx) match {
+          case Some(ity) => Right(ity)
+          case None => Left(s"tuple does not $idx index")
+        }
+      } yield pty
   }
 
-  def checkTermType(t: Term, ty: Type, ctx: Context): Either[String, Unit] =
+  def checkTermType(t: Term, ty: Type, ctx: TypingContext): Either[String, Unit] =
     typecheck(t, ctx).flatMap(ty0 => typesMatch(ty0, ty))
 
   def typesMatch(ty1: Type, ty2: Type): Either[String, Unit] =
@@ -189,7 +225,7 @@ object Main {
       )
     )
     
-    val res = typecheck(ast.translate, Context())
+    val res = typecheck(ast.translate, TypingContext())
     println(res)
   }
 

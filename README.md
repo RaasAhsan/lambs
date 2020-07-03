@@ -12,7 +12,6 @@ TODO:
 - variants
 - arrays
 - mutability
-- function abstraction and application
 - parametric polymorphism
 - type annotations
 - type inference/reconstruction
