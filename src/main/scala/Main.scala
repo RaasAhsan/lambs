@@ -12,6 +12,7 @@ object Main {
     // repeat syntactic forms from Term
     // TODO: is there a better way to avoid repetition? maybe a type parameter
     case EVar(name: String)
+    // TODO: remove VarBinding once there is a TranslateContext for external terms
     case EAbs(name: VarBinding, ty: Type, t: ETerm)
     case EApp(t1: ETerm, t2: ETerm)
     case EInt(x: Int)
@@ -318,7 +319,7 @@ object Main {
 //    val res = typecheck(ast.translate, TypingContext())
 //    println(res)
 
-    val ast = TmTyAbs("X", TmAbs(VarBinding.Name("x"), TyVar("X"), TmVar("x")))
+    val ast = TmTyAbs("X", TmAbs(VarBinding.Name("z"), TyInt, TmAbs(VarBinding.Name("x"), TyVar("X"), TmVar("x"))))
 
     val res = typecheck(ast, TypingContext())
     println(res)
