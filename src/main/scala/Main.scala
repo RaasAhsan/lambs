@@ -26,6 +26,8 @@ object Main {
     case ETuple(ts: List[ETerm])
     case ETupleProj(t: ETerm, idx: Int)
     case ELet(name: String, t1: ETerm, t2: ETerm)
+    case ETyAbs(name: String, t: ETerm)
+    case ETyApp(t: ETerm, ty: Type)
 
     // derived forms
     case ESeq(t1: ETerm, t2: ETerm)
@@ -64,6 +66,10 @@ object Main {
         TmTupleProj(t.translate, idx)
       case ELet(name, t1, t2) =>
         TmLet(name, t1.translate, t2.translate)
+      case ETyAbs(name, t) =>
+        TmTyAbs(name, t.translate)
+      case ETyApp(t, ty) =>
+        TmTyApp(t.translate, ty)
 
       // desugar derived forms
       // only one pass for desugaring
@@ -98,7 +104,7 @@ object Main {
     case TmLet(name: String, t1: Term, t2: Term)
         
     // Universal polymorphism aka parametric polymorphism
-    // Define a generic function that is uniform for all parameters
+    // Define a generic function that behaves uniformly for all substitutions
     case TmTyAbs(name: String, t: Term)
     case TmTyApp(t: Term, ty: Type)
   }
@@ -113,6 +119,23 @@ object Main {
     // Polymorphism
     case TyVar(name: String)
     case TyUniv(name: String, ty: Type)
+    
+    def printType: String = this match {
+      case TyFunc(ty1, ty2) =>
+        s"(${ty1.printType} -> ${ty2.printType})"
+      case TyInt =>
+        "Int"
+      case TyBool =>
+        "Bool"
+      case TyUnit =>
+        "Unit"
+      case TyTuple(tys) =>
+        s"(${tys.map(_.printType).mkString(",")})"
+      case TyVar(tname) =>
+        tname
+      case TyUniv(name, ty) =>
+        s"(∀$name. ${ty.printType})"
+    }
     
     def substTypeVar(name: String, nty: Type): Type = this match {
       case TyFunc(ty1, ty2) =>
@@ -287,13 +310,11 @@ object Main {
 //    val res = typecheck(ast.translate, TypingContext())
 //    println(res)
     
-    val ast = TmTyApp(
-      TmTyAbs("X", TmAbs(VarBinding.Name("x"), TyVar("X"), TmVar("x"))),
-      TyInt
-    )
+    val ast = TmTyAbs("X", TmAbs(VarBinding.Name("x"), TyVar("X"), TmVar("x")))
     
     val res = typecheck(ast, TypingContext())
     println(res)
+    println(res.toOption.get.printType)
   }
 
 }
