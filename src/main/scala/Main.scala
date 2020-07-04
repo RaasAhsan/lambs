@@ -157,6 +157,26 @@ object Main {
       case TyUniv(name, ty) =>
         TyUniv(name, ty.substTypeVar(name, nty))
     }
+      
+    // Returns whether or not the type is completely bound.
+    def bound(ctx: TypingContext): Boolean = this match {
+      case TyFunc(ty1, ty2) =>
+        ty1.bound(ctx) && ty2.bound(ctx)
+      case TyInt =>
+        true
+      case TyBool =>
+        true
+      case TyUnit  =>
+        true
+      case TyTuple(tys) =>
+        tys.foldLeft(true)(_ && _.bound(ctx))
+      case TyVar(tname) =>
+        ctx.hasType(tname)
+      case TyUniv(name, ty) =>
+        // New type variables may be introduced, so they must be captured in the context
+        // TODO: return an appropriate error
+        if ctx.hasType(name) then false else ty.bound(ctx.addType(name))
+    }
   }
 
   enum VarBinding {
@@ -164,7 +184,8 @@ object Main {
     case None
   }
 
-  // A typing context holds assumptions about the types of free variables in a term.
+  // A typing context holds assumptions about the types of free variables in a term,
+  // and also the names of polymorphic types that are bound to type abstractions.
   // The scope of a binding is the body of an abstraction, so the typing context
   // holds bindings for all the enclosing abstractions for a particular term.
   // We are using a symbolic name to uniquely identify variables as opposed
@@ -202,11 +223,7 @@ object Main {
         // The declared type of the abstraction must be defined
         // For polymorphic types, they must be captured by the typing context
         // TODO: Another way to do this is to assert that all returned types are in the context
-        _ <- ty match {
-          case Type.TyVar(name) =>
-            if ctx.hasType(name) then Right(()) else Left(s"unknown type variable $name")
-          case _ => Right(())
-        }
+        _ <- if ty.bound(ctx) then Right(()) else Left(s"invalid function abstraction type")
         ty2 <- typecheck(t, newCtx)
       } yield Type.TyFunc(ty, ty2)
     case Term.TmApp(t1, t2) =>
@@ -320,10 +337,11 @@ object Main {
 //    println(res)
 
     val ast = TmTyAbs("X", TmAbs(VarBinding.Name("z"), TyInt, TmAbs(VarBinding.Name("x"), TyVar("X"), TmVar("x"))))
+    val selfApp = TmAbs(VarBinding.Name("x"), TyUniv("X", TyFunc(TyVar("X"), TyVar("X"))), TmApp(TmTyApp(TmVar("x"), TyUniv("X", TyFunc(TyVar("X"), TyVar("X")))), TmVar("x")))
 
     val res = typecheck(ast, TypingContext())
     println(res)
-    println(res.toOption.get.printType)
+    println(typecheck(selfApp, TypingContext()).toOption.get.printType)
   }
 
 }

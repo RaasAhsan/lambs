@@ -156,12 +156,17 @@ class TypeCheckTests extends AnyFunSuite with Matchers {
     typecheck(t, ctx) shouldBe Right(TyUniv("X", TyInt))
   }
   
-  test("TmAbs is ill-typed if a non-existant type variable is declared") {
+  test("TmAbs is ill-typed if a non-existent type variable is declared") {
     val t = TmAbs(VarBinding.Name("x"), TyVar("X"), TmVar("x"))
     typecheck(t, ctx) shouldBe a [TypeCheckFail]
   }
+
+  test("TmAbs is ill-typed if a non-existent type variable is declared in a function type") {
+    val t = TmAbs(VarBinding.Name("x"), TyFunc(TyVar("X"), TyInt), TmVar("x"))
+    typecheck(t, ctx) shouldBe a [TypeCheckFail]
+  }
   
-  test("TmAbs types if type variable is declared legally") {
+  test("TmAbs types if type variable is legal") {
     val t = TmTyAbs("X", TmAbs(VarBinding.Name("x"), TyVar("X"), TmVar("x")))
     typecheck(t, ctx) shouldBe Right(TyUniv("X", TyFunc(TyVar("X"), TyVar("X"))))
   }
