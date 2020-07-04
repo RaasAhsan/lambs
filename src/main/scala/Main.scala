@@ -131,7 +131,7 @@ object Main {
       case TyUnit =>
         "Unit"
       case TyTuple(tys) =>
-        s"(${tys.map(_.printType).mkString(",")})"
+        s"(${tys.map(_.printType).mkString(", ")})"
       case TyVar(tname) =>
         tname
       case TyUniv(name, ty) =>
@@ -157,7 +157,7 @@ object Main {
       case TyUniv(name, ty) =>
         TyUniv(name, ty.substTypeVar(name, nty))
     }
-      
+
     // Returns whether or not the type is completely bound.
     def bound(ctx: TypingContext): Boolean = this match {
       case TyFunc(ty1, ty2) =>
