@@ -3,7 +3,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
 
 class TypeCheckTests extends AnyFunSuite with Matchers {
-  import Main._
+  import Checker._
   import Term._
   import Type._
   
