@@ -1,4 +1,4 @@
-import Checker.{Term, Type, VarBinding}
+import Checker.{Term, Type}
 
 // Representation of the external abstract syntax tree.
 // We distinguish between an external and internal language
@@ -12,7 +12,7 @@ enum ParseTerm derives Eql {
   // TODO: is there a better way to avoid repetition? maybe a type parameter
   case ParseVar(name: String)
   // TODO: remove VarBinding once there is a TranslateContext for external terms
-  case ParseAbs(name: VarBinding, ty: Type, t: ParseTerm)
+  case ParseAbs(name: String, ty: Type, t: ParseTerm)
   case ParseApp(t1: ParseTerm, t2: ParseTerm)
   case ParseInt(x: Int)
   case ParseAdd(t1: ParseTerm, t2: ParseTerm)
@@ -35,45 +35,55 @@ enum ParseTerm derives Eql {
   import Term._
 
   // Introduce translate context?
-  def translate: Term = this match {
+  def translate(ctx: TranslateContext): Term = this match {
     case ParseVar(name) =>
       TmVar(name)
     case ParseAbs(name, ty, t) =>
-      TmAbs(name, ty, t.translate)
+      TmAbs(name, ty, t.translate(ctx))
     case ParseApp(t1, t2) =>
-      TmApp(t1.translate, t2.translate)
+      TmApp(t1.translate(ctx), t2.translate(ctx))
     case ParseInt(x) =>
       TmInt(x)
     case ParseAdd(t1, t2) =>
-      TmAdd(t1.translate, t2.translate)
+      TmAdd(t1.translate(ctx), t2.translate(ctx))
     case ParseTrue =>
       TmTrue
     case ParseFalse =>
       TmFalse
     case ParseAnd(t1, t2) =>
-      TmAnd(t1.translate, t2.translate)
+      TmAnd(t1.translate(ctx), t2.translate(ctx))
     case ParseOr(t1, t2) =>
-      TmOr(t1.translate, t2.translate)
+      TmOr(t1.translate(ctx), t2.translate(ctx))
     case ParseNot(t1) =>
-      TmNot(t1.translate)
+      TmNot(t1.translate(ctx))
     case ParseIf(t1, t2, t3) =>
-      TmIf(t1.translate, t2.translate, t3.translate)
+      TmIf(t1.translate(ctx), t2.translate(ctx), t3.translate(ctx))
     case ParseUnit =>
       TmUnit
     case ParseTuple(ts) =>
-      TmTuple(ts.map(_.translate))
+      TmTuple(ts.map(_.translate(ctx)))
     case ParseTupleProj(t, idx) =>
-      TmTupleProj(t.translate, idx)
+      TmTupleProj(t.translate(ctx), idx)
     case ParseLet(name, t1, t2) =>
-      TmLet(name, t1.translate, t2.translate)
+      TmLet(name, t1.translate(ctx), t2.translate(ctx))
     case ParseTyAbs(name, t) =>
-      TmTyAbs(name, t.translate)
+      TmTyAbs(name, t.translate(ctx))
     case ParseTyApp(t, ty) =>
-      TmTyApp(t.translate, ty)
+      TmTyApp(t.translate(ctx), ty)
 
     // desugar derived forms
     // only one pass for desugaring
     case ParseSeq(t1, t2) =>
-      TmApp(Term.TmAbs(VarBinding.None, Type.TyUnit, t2.translate), t1.translate)
+      val (newCtx, name) = ctx.nextName
+      TmApp(Term.TmAbs(name, Type.TyUnit, t2.translate(newCtx)), t1.translate(newCtx))
   }
+}
+
+final case class TranslateContext(nameIndex: Int) {
+  def nextName: (TranslateContext, String) =
+    (copy(nameIndex + 1), s"$$$$${nameIndex + 1}$$$$")
+}
+
+object TranslateContext {
+  def apply(): TranslateContext = TranslateContext(0)
 }

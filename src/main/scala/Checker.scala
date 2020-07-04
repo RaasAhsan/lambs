@@ -5,7 +5,7 @@ object Checker {
   // Type checking is performed on this structure.
   enum Term derives Eql {
     case TmVar(name: String)
-    case TmAbs(name: VarBinding, ty: Type, t: Term)
+    case TmAbs(name: String, ty: Type, t: Term)
     case TmApp(t1: Term, t2: Term)
     case TmInt(x: Int)
     case TmAdd(t1: Term, t2: Term)
@@ -104,11 +104,6 @@ object Checker {
     }
   }
 
-  enum VarBinding {
-    case Name(value: String)
-    case None
-  }
-
   // A typing context holds assumptions about the types of free variables in a term,
   // and also the names of polymorphic types that are bound to type abstractions.
   // The scope of a binding is the body of an abstraction, so the typing context
@@ -140,11 +135,7 @@ object Checker {
       ctx.getTerm(name).fold(Left(s"no type binding found for $name"))(Right.apply)
     case Term.TmAbs(name, ty, t) =>
       for {
-        newCtx <- name match {
-          case VarBinding.Name(value) =>
-            ctx.getTerm(value).fold(Right(ctx.addTerm(value, ty)))(_ => Left(s"existing binding found for $name"))
-          case VarBinding.None => Right(ctx)
-        }
+        newCtx <- ctx.getTerm(name).fold(Right(ctx.addTerm(name, ty)))(_ => Left(s"existing binding found for $name"))
         // The declared type of the abstraction must be defined
         // For polymorphic types, they must be captured by the typing context
         // TODO: Another way to do this is to assert that all returned types are in the context

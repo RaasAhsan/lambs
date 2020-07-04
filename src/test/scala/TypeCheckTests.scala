@@ -19,27 +19,27 @@ class TypeCheckTests extends AnyFunSuite with Matchers {
   }
   
   test("TmAbs types to TyFunc") {
-    val t = TmAbs(VarBinding.Name("x"), TyInt, TmVar("x"))
+    val t = TmAbs("x", TyInt, TmVar("x"))
     typecheck(t, ctx) shouldBe Right(TyFunc(TyInt, TyInt))
   }
 
   test("TmAbs is ill-typed if body is ill-typed") {
-    val t = TmAbs(VarBinding.Name("x"), TyInt, TmVar("y"))
+    val t = TmAbs("x", TyInt, TmVar("y"))
     typecheck(t, ctx) shouldBe a [TypeCheckFail]
   }
   
   test("TmAbs is ill-typed if a binding already exists for a name") {
-    val t = TmAbs(VarBinding.Name("x"), TyInt, TmAbs(VarBinding.Name("x"), TyInt, TmVar("x")))
+    val t = TmAbs("x", TyInt, TmAbs("x", TyInt, TmVar("x")))
     typecheck(t, ctx) shouldBe a [TypeCheckFail]
   }
 
   test("TmApp types to return type of left hand side abstraction") {
-    val t = TmApp(TmAbs(VarBinding.Name("x"), TyInt, TmVar("x")), TmInt(10))
+    val t = TmApp(TmAbs("x", TyInt, TmVar("x")), TmInt(10))
     typecheck(t, ctx) shouldBe Right(TyInt)
   }
   
   test("TmApp is ill-typed if there is a type mismatch in application") {
-    val t = TmApp(TmAbs(VarBinding.Name("x"), TyInt, TmVar("x")), TmTrue)
+    val t = TmApp(TmAbs("x", TyInt, TmVar("x")), TmTrue)
     typecheck(t, ctx) shouldBe a [TypeCheckFail]
   }
 
@@ -157,22 +157,22 @@ class TypeCheckTests extends AnyFunSuite with Matchers {
   }
   
   test("TmAbs is ill-typed if a non-existent type variable is declared") {
-    val t = TmAbs(VarBinding.Name("x"), TyVar("X"), TmVar("x"))
+    val t = TmAbs("x", TyVar("X"), TmVar("x"))
     typecheck(t, ctx) shouldBe a [TypeCheckFail]
   }
 
   test("TmAbs is ill-typed if a non-existent type variable is declared in a function type") {
-    val t = TmAbs(VarBinding.Name("x"), TyFunc(TyVar("X"), TyInt), TmVar("x"))
+    val t = TmAbs("x", TyFunc(TyVar("X"), TyInt), TmVar("x"))
     typecheck(t, ctx) shouldBe a [TypeCheckFail]
   }
   
   test("TmAbs types if type variable is legal") {
-    val t = TmTyAbs("X", TmAbs(VarBinding.Name("x"), TyVar("X"), TmVar("x")))
+    val t = TmTyAbs("X", TmAbs("x", TyVar("X"), TmVar("x")))
     typecheck(t, ctx) shouldBe Right(TyUniv("X", TyFunc(TyVar("X"), TyVar("X"))))
   }
   
   test("TmTyApp types with substitutions") {
-    val t = TmTyApp(TmTyAbs("X", TmAbs(VarBinding.Name("x"), TyVar("X"), TmVar("x"))), TyInt)
+    val t = TmTyApp(TmTyAbs("X", TmAbs("x", TyVar("X"), TmVar("x"))), TyInt)
     typecheck(t, ctx) shouldBe Right(TyFunc(TyInt, TyInt))
   }
 }

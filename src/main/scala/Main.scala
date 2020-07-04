@@ -22,8 +22,8 @@ object Main {
     //    val res = typecheck(ast.translate, TypingContext())
     //    println(res)
 
-    val ast = TmTyAbs("X", TmAbs(VarBinding.Name("z"), TyInt, TmAbs(VarBinding.Name("x"), TyVar("X"), TmVar("x"))))
-    val selfApp = TmAbs(VarBinding.Name("x"), TyUniv("X", TyFunc(TyVar("X"), TyVar("X"))), TmApp(TmTyApp(TmVar("x"), TyUniv("X", TyFunc(TyVar("X"), TyVar("X")))), TmVar("x")))
+    val ast = TmTyAbs("X", TmAbs("z", TyInt, TmAbs("x", TyVar("X"), TmVar("x"))))
+    val selfApp = TmAbs("x", TyUniv("X", TyFunc(TyVar("X"), TyVar("X"))), TmApp(TmTyApp(TmVar("x"), TyUniv("X", TyFunc(TyVar("X"), TyVar("X")))), TmVar("x")))
 
     val res = typecheck(ast, TypingContext())
     println(res)
