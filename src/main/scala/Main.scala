@@ -10,7 +10,7 @@ object Main {
   // If we wanted to write a parser for this language, it would target this AST.
   enum ETerm derives Eql {
     // repeat syntactic forms from Term
-    // TODO: is there a better way to lower repetition? maybe a type parameter
+    // TODO: is there a better way to avoid repetition? maybe a type parameter
     case EVar(name: String)
     case EAbs(name: VarBinding, ty: Type, t: ETerm)
     case EApp(t1: ETerm, t2: ETerm)
@@ -87,13 +87,20 @@ object Main {
     case TmNot(t1: Term)
     case TmIf(t1: Term, t2: Term, t3: Term)
     case TmUnit
+      
     // Tuples and tuple projections can be expressed as derived forms of records or classes.
     // This is exactly what Scala does; TupleN classes are defined as part of the standard library
     // and the (x, y, ...) syntactic form is the target of desugaring.
     // Tuples as structural records might be infeasible because ordering of type elements is significant.
     case TmTuple(ts: List[Term])
     case TmTupleProj(t: Term, idx: Int)
+      
     case TmLet(name: String, t1: Term, t2: Term)
+        
+    // Universal polymorphism aka parametric polymorphism
+    // Define a generic function that is uniform for all parameters
+    case TmTyAbs(name: String, t: Term)
+    case TmTyApp(t: Term, ty: Type)
   }
   
   enum Type derives Eql {
@@ -102,6 +109,30 @@ object Main {
     case TyBool
     case TyUnit
     case TyTuple(tys: List[Type])
+      
+    // Polymorphism
+    case TyVar(name: String)
+    case TyUniv(name: String, ty: Type)
+    
+    def substTypeVar(name: String, nty: Type): Type = this match {
+      case TyFunc(ty1, ty2) =>
+        TyFunc(ty1.substTypeVar(name, nty), ty2.substTypeVar(name, nty))
+      case TyInt =>
+        TyInt
+      case TyBool =>
+        TyBool
+      case TyUnit  =>
+        TyUnit
+      case TyTuple(tys) =>
+        TyTuple(tys.map(_.substTypeVar(name, nty)))
+      case TyVar(tname) =>
+        if name == tname then
+          nty
+        else
+          this
+      case TyUniv(name, ty) =>
+        TyUniv(name, ty.substTypeVar(name, nty))
+    }
   }
 
   enum VarBinding {
@@ -114,30 +145,34 @@ object Main {
   // holds bindings for all the enclosing abstractions for a particular term.
   // We are using a symbolic name to uniquely identify variables as opposed
   // to their de Bruijn indexes, which are arguably more useful during evaluation.
-  opaque type TypingContext = Map[String, Type]
+  final case class TypingContext(terms: Map[String, Type], types: Map[String, Type]) {
+    def getTerm(name: String): Option[Type] =
+      terms.get(name)
 
-  object TypingContext {
-    def apply(): TypingContext = Map()
+    def addTerm(name: String, ty: Type): TypingContext =
+      copy(terms = terms + (name -> ty))
+
+    def getType(name: String): Option[Type] =
+      types.get(name)
+
+    def addType(name: String, ty: Type): TypingContext =
+      copy(types = types + (name -> ty))
   }
 
-  extension contextOps on (ctx: TypingContext) {
-    def get(name: String): Option[Type] =
-      ctx.get(name)
-
-    def add(name: String, ty: Type): TypingContext =
-      ctx + (name -> ty)
+  object TypingContext {
+    def apply(): TypingContext = TypingContext(Map(), Map())
   }
   
   // Each case arm captures an inference rule in the typing relation.
   // Premises are checked, and the return value reflects the conclusion.
   def typecheck(term: Term, ctx: TypingContext): Either[String, Type] = term match {
     case Term.TmVar(name) =>
-      ctx.get(name).fold(Left(s"no type binding found for $name"))(Right.apply)
+      ctx.getTerm(name).fold(Left(s"no type binding found for $name"))(Right.apply)
     case Term.TmAbs(name, ty, t) =>
       for {
         newCtx <- name match {
           case VarBinding.Name(value) =>
-            ctx.get(value).fold(Right(ctx.add(value, ty)))(_ => Left(s"existing binding found for $name"))
+            ctx.getTerm(value).fold(Right(ctx.addTerm(value, ty)))(_ => Left(s"existing binding found for $name"))
           case VarBinding.None => Right(ctx)
         }
         ty2 <- typecheck(t, newCtx)
@@ -205,9 +240,22 @@ object Main {
     case Term.TmLet(name, t1, t2) =>
       for {
         ty1    <- typecheck(t1, ctx)
-        newCtx <- ctx.get(name).fold(Right(ctx.add(name, ty1)))(_ => Left(s"existing binding found for $name"))
+        newCtx <- ctx.getTerm(name).fold(Right(ctx.addTerm(name, ty1)))(_ => Left(s"existing term binding found for $name"))
         ty2    <- typecheck(t2, newCtx)
       } yield ty2
+    case Term.TmTyAbs(name, t) =>
+      for {
+        newCtx <- ctx.getType(name).fold(Right(ctx.addType(name, Type.TyVar(name))))(_ => Left(s"existing type binding found for $name"))
+        ty     <- typecheck(t, newCtx)
+      } yield Type.TyUniv(name, ty)
+    case Term.TmTyApp(t, ty) =>
+      for {
+        ty1 <- typecheck(t, ctx)
+        nty <- ty1 match {
+          case Type.TyUniv(name, ity) => Right(ity.substTypeVar(name, ty))
+          case _ => Left("invalid type application")
+        }
+      } yield nty
   }
 
   def checkTermType(t: Term, ty: Type, ctx: TypingContext): Either[String, Unit] =
@@ -224,19 +272,27 @@ object Main {
     import Type._
     import ETerm._
 
-    val ast = ESeq(
-      EUnit,
-      EIf(
-        EOr(EAnd(ETrue, ETrue), EFalse),
-        EInt(30),
-        EApp(
-          EAbs(VarBinding.Name("x"), TyInt, EAdd(EVar("x"), EVar("x"))),
-          EAdd(EInt(10), EInt(20))
-        )
-      )
+//    val ast = ESeq(
+//      EUnit,
+//      EIf(
+//        EOr(EAnd(ETrue, ETrue), EFalse),
+//        EInt(30),
+//        EApp(
+//          EAbs(VarBinding.Name("x"), TyInt, EAdd(EVar("x"), EVar("x"))),
+//          EAdd(EInt(10), EInt(20))
+//        )
+//      )
+//    )
+//    
+//    val res = typecheck(ast.translate, TypingContext())
+//    println(res)
+    
+    val ast = TmTyApp(
+      TmTyAbs("X", TmAbs(VarBinding.Name("x"), TyVar("X"), TmVar("x"))),
+      TyInt
     )
     
-    val res = typecheck(ast.translate, TypingContext())
+    val res = typecheck(ast, TypingContext())
     println(res)
   }
 
