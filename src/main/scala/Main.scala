@@ -93,16 +93,16 @@ object Main {
     case TmNot(t1: Term)
     case TmIf(t1: Term, t2: Term, t3: Term)
     case TmUnit
-      
+
     // Tuples and tuple projections can be expressed as derived forms of records or classes.
     // This is exactly what Scala does; TupleN classes are defined as part of the standard library
     // and the (x, y, ...) syntactic form is the target of desugaring.
     // Tuples as structural records might be infeasible because ordering of type elements is significant.
     case TmTuple(ts: List[Term])
     case TmTupleProj(t: Term, idx: Int)
-      
+
     case TmLet(name: String, t1: Term, t2: Term)
-        
+
     // Universal polymorphism aka parametric polymorphism
     // Define a generic function that behaves uniformly for all substitutions
     case TmTyAbs(name: String, t: Term)
@@ -115,11 +115,11 @@ object Main {
     case TyBool
     case TyUnit
     case TyTuple(tys: List[Type])
-      
+
     // Polymorphism
     case TyVar(name: String)
     case TyUniv(name: String, ty: Type)
-    
+
     def printType: String = this match {
       case TyFunc(ty1, ty2) =>
         s"(${ty1.printType} -> ${ty2.printType})"
@@ -136,7 +136,7 @@ object Main {
       case TyUniv(name, ty) =>
         s"(∀$name. ${ty.printType})"
     }
-    
+
     def substTypeVar(name: String, nty: Type): Type = this match {
       case TyFunc(ty1, ty2) =>
         TyFunc(ty1.substTypeVar(name, nty), ty2.substTypeVar(name, nty))
@@ -168,22 +168,22 @@ object Main {
   // holds bindings for all the enclosing abstractions for a particular term.
   // We are using a symbolic name to uniquely identify variables as opposed
   // to their de Bruijn indexes, which are arguably more useful during evaluation.
-  final case class TypingContext(terms: Map[String, Type], types: Map[String, Type]) {
+  final case class TypingContext(terms: Map[String, Type], types: Set[String]) {
     def getTerm(name: String): Option[Type] =
       terms.get(name)
 
     def addTerm(name: String, ty: Type): TypingContext =
       copy(terms = terms + (name -> ty))
 
-    def getType(name: String): Option[Type] =
-      types.get(name)
+    def hasType(name: String): Boolean =
+      types.contains(name)
 
-    def addType(name: String, ty: Type): TypingContext =
-      copy(types = types + (name -> ty))
+    def addType(name: String): TypingContext =
+      copy(types = types + name)
   }
 
   object TypingContext {
-    def apply(): TypingContext = TypingContext(Map(), Map())
+    def apply(): TypingContext = TypingContext(Map(), Set())
   }
   
   // Each case arm captures an inference rule in the typing relation.
@@ -198,6 +198,14 @@ object Main {
             ctx.getTerm(value).fold(Right(ctx.addTerm(value, ty)))(_ => Left(s"existing binding found for $name"))
           case VarBinding.None => Right(ctx)
         }
+        // The declared type of the abstraction must be defined
+        // For polymorphic types, they must be captured by the typing context
+        // TODO: Another way to do this is to assert that all returned types are in the context
+        _ <- ty match {
+          case Type.TyVar(name) =>
+            if ctx.hasType(name) then Right(()) else Left(s"unknown type variable $name")
+          case _ => Right(())
+        }
         ty2 <- typecheck(t, newCtx)
       } yield Type.TyFunc(ty, ty2)
     case Term.TmApp(t1, t2) =>
@@ -210,16 +218,16 @@ object Main {
         }
         _   <- if ty2 == fty._1 then Right(()) else Left(s"type mismatch: applied function of type $ty1 to a term of type $ty2")
       } yield fty._2
-    case _: Term.TmInt => 
+    case _: Term.TmInt =>
       Right(Type.TyInt)
     case Term.TmAdd(t1, t2) =>
       for {
         _   <- checkTermType(t1, Type.TyInt, ctx)
         _   <- checkTermType(t2, Type.TyInt, ctx)
       } yield Type.TyInt
-    case Term.TmTrue => 
+    case Term.TmTrue =>
       Right(Type.TyBool)
-    case Term.TmFalse => 
+    case Term.TmFalse =>
       Right(Type.TyBool)
     case Term.TmAnd(t1, t2) =>
       for {
@@ -268,7 +276,7 @@ object Main {
       } yield ty2
     case Term.TmTyAbs(name, t) =>
       for {
-        newCtx <- ctx.getType(name).fold(Right(ctx.addType(name, Type.TyVar(name))))(_ => Left(s"existing type binding found for $name"))
+        newCtx <- if ctx.hasType(name) then Left(s"existing type binding found for $name") else Right(ctx.addType(name))
         ty     <- typecheck(t, newCtx)
       } yield Type.TyUniv(name, ty)
     case Term.TmTyApp(t, ty) =>
@@ -276,7 +284,7 @@ object Main {
         ty1 <- typecheck(t, ctx)
         nty <- ty1 match {
           case Type.TyUniv(name, ity) => Right(ity.substTypeVar(name, ty))
-          case _ => Left("invalid type application")
+          case _ => Left("illegal type application")
         }
       } yield nty
   }
@@ -306,12 +314,12 @@ object Main {
 //        )
 //      )
 //    )
-//    
+//
 //    val res = typecheck(ast.translate, TypingContext())
 //    println(res)
-    
+
     val ast = TmTyAbs("X", TmAbs(VarBinding.Name("x"), TyVar("X"), TmVar("x")))
-    
+
     val res = typecheck(ast, TypingContext())
     println(res)
     println(res.toOption.get.printType)
