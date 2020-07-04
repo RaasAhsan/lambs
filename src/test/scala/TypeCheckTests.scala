@@ -144,4 +144,9 @@ class TypeCheckTests extends AnyFunSuite with Matchers {
     val t = TmTupleProj(TmTuple(List(TmInt(10), TmTrue, TmFalse)), 4)
     typecheck(t, ctx) shouldBe a [TypeCheckFail]
   }
+  
+  test("TmLet types to its body") {
+    val t = TmLet("x", TmInt(10), TmAdd(TmVar("x"), TmInt(10)))
+    typecheck(t, ctx) shouldBe Right(TyInt)
+  }
 }

@@ -1,6 +1,6 @@
 
 object Main {
-  
+
   // Representation of the external abstract syntax tree.
   // We distinguish between an external and internal language
   // for the purposes of adding syntactic sugar or derived forms:
@@ -25,7 +25,8 @@ object Main {
     case EUnit
     case ETuple(ts: List[ETerm])
     case ETupleProj(t: ETerm, idx: Int)
-      
+    case ELet(name: String, t1: ETerm, t2: ETerm)
+
     // derived forms
     case ESeq(t1: ETerm, t2: ETerm)
 
@@ -33,38 +34,40 @@ object Main {
 
     // Introduce translate context?
     def translate: Term = this match {
-      case EVar(name) => 
+      case EVar(name) =>
         TmVar(name)
-      case EAbs(name, ty, t) => 
+      case EAbs(name, ty, t) =>
         TmAbs(name, ty, t.translate)
-      case EApp(t1, t2) => 
+      case EApp(t1, t2) =>
         TmApp(t1.translate, t2.translate)
-      case EInt(x) => 
+      case EInt(x) =>
         TmInt(x)
-      case EAdd(t1, t2) => 
+      case EAdd(t1, t2) =>
         TmAdd(t1.translate, t2.translate)
-      case ETrue => 
+      case ETrue =>
         TmTrue
-      case EFalse => 
+      case EFalse =>
         TmFalse
-      case EAnd(t1, t2) => 
+      case EAnd(t1, t2) =>
         TmAnd(t1.translate, t2.translate)
-      case EOr(t1, t2) => 
+      case EOr(t1, t2) =>
         TmOr(t1.translate, t2.translate)
-      case ENot(t1) => 
+      case ENot(t1) =>
         TmNot(t1.translate)
-      case EIf(t1, t2, t3) => 
+      case EIf(t1, t2, t3) =>
         TmIf(t1.translate, t2.translate, t3.translate)
-      case EUnit => 
+      case EUnit =>
         TmUnit
-      case ETuple(ts) => 
+      case ETuple(ts) =>
         TmTuple(ts.map(_.translate))
       case ETupleProj(t, idx) =>
-        TmTupleProj(t.translate, idx)  
-      
+        TmTupleProj(t.translate, idx)
+      case ELet(name, t1, t2) =>
+        TmLet(name, t1.translate, t2.translate)
+
       // desugar derived forms
-      // only one pass for desugaring  
-      case ESeq(t1, t2) => 
+      // only one pass for desugaring
+      case ESeq(t1, t2) =>
         TmApp(Term.TmAbs(VarBinding.None, Type.TyUnit, t2.translate), t1.translate)
     }
   }
@@ -86,9 +89,11 @@ object Main {
     case TmUnit
     // Tuples and tuple projections can be expressed as derived forms of records or classes.
     // This is exactly what Scala does; TupleN classes are defined as part of the standard library
-    // and the (x, y, ...) syntactic form is the target of desugaring. 
+    // and the (x, y, ...) syntactic form is the target of desugaring.
+    // Tuples as structural records might be infeasible because ordering of type elements is significant.
     case TmTuple(ts: List[Term])
     case TmTupleProj(t: Term, idx: Int)
+    case TmLet(name: String, t1: Term, t2: Term)
   }
   
   enum Type derives Eql {
@@ -98,7 +103,7 @@ object Main {
     case TyUnit
     case TyTuple(tys: List[Type])
   }
-  
+
   enum VarBinding {
     case Name(value: String)
     case None
@@ -147,14 +152,17 @@ object Main {
         }
         _   <- if ty2 == fty._1 then Right(()) else Left(s"type mismatch: applied function of type $ty1 to a term of type $ty2")
       } yield fty._2
-    case _: Term.TmInt => Right(Type.TyInt)
+    case _: Term.TmInt => 
+      Right(Type.TyInt)
     case Term.TmAdd(t1, t2) =>
       for {
         _   <- checkTermType(t1, Type.TyInt, ctx)
         _   <- checkTermType(t2, Type.TyInt, ctx)
       } yield Type.TyInt
-    case Term.TmTrue => Right(Type.TyBool)
-    case Term.TmFalse => Right(Type.TyBool)
+    case Term.TmTrue => 
+      Right(Type.TyBool)
+    case Term.TmFalse => 
+      Right(Type.TyBool)
     case Term.TmAnd(t1, t2) =>
       for {
         _   <- checkTermType(t1, Type.TyBool, ctx)
@@ -192,18 +200,21 @@ object Main {
           case Type.TyTuple(tys) => Right(tys)
           case _ => Left(s"left hand of tuple projection is not a tuple. $t: $ty")
         }
-        pty <- tty.lift(idx) match {
-          case Some(ity) => Right(ity)
-          case None => Left(s"tuple does not $idx index")
-        }
+        pty <- tty.lift(idx).fold(Left(s"tuple does not $idx index"))(Right.apply)
       } yield pty
+    case Term.TmLet(name, t1, t2) =>
+      for {
+        ty1    <- typecheck(t1, ctx)
+        newCtx <- ctx.get(name).fold(Right(ctx.add(name, ty1)))(_ => Left(s"existing binding found for $name"))
+        ty2    <- typecheck(t2, newCtx)
+      } yield ty2
   }
 
   def checkTermType(t: Term, ty: Type, ctx: TypingContext): Either[String, Unit] =
     typecheck(t, ctx).flatMap(ty0 => typesMatch(ty0, ty))
 
   def typesMatch(ty1: Type, ty2: Type): Either[String, Unit] =
-    if ty1 == ty2
+    if ty1 == ty2 then
       Right(())
     else
       Left(s"type mismatch: $ty1 ; $ty2")
@@ -212,7 +223,7 @@ object Main {
     import Term._
     import Type._
     import ETerm._
-    
+
     val ast = ESeq(
       EUnit,
       EIf(
