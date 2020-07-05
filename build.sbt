@@ -7,7 +7,8 @@ lazy val root = project
     scalaVersion := "0.24.0-RC1",
     
     scalacOptions ++= Seq(
-      "-language:implicitConversions"
+      "-language:implicitConversions",
+      "-Xfatal-warnings"
     ),
 
     libraryDependencies ++= Seq(

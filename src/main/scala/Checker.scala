@@ -1,6 +1,9 @@
 
 object Checker {
   
+  type RecordField = (String, Term)
+  type RecordFieldType = (String, Type)
+  
   // Representation of the internal abstract syntax tree.
   // Type checking is performed on this structure.
   enum Term derives Eql {
@@ -16,6 +19,8 @@ object Checker {
     case TmNot(t1: Term)
     case TmIf(t1: Term, t2: Term, t3: Term)
     case TmUnit
+      
+    // Compound terms / data aggregates
 
     // Tuples and tuple projections can be expressed as derived forms of records or classes.
     // This is exactly what Scala does; TupleN classes are defined as part of the standard library
@@ -23,6 +28,9 @@ object Checker {
     // Tuples as structural records might be infeasible because ordering of type elements is significant.
     case TmTuple(ts: List[Term])
     case TmTupleProj(t: Term, idx: Int)
+
+    case TmRecord(rs: List[RecordField])
+    case TmRecordProj(t: Term, l: String)
 
     case TmLet(name: String, t1: Term, t2: Term)
 
@@ -37,7 +45,10 @@ object Checker {
     case TyInt
     case TyBool
     case TyUnit
+      
     case TyTuple(tys: List[Type])
+    // structural labeled records
+    case TyRecord(tys: List[RecordFieldType])
 
     // Polymorphism
     case TyVar(name: String)
@@ -58,6 +69,10 @@ object Checker {
         tname
       case TyUniv(name, ty) =>
         s"(∀$name. ${ty.printType})"
+      case TyRecord(tys) => {
+        val i = tys.map((name, ty) => s"$name:${ty.printType}").mkString(",")
+        s"{$i}"
+      }
     }
 
     def substTypeVar(name: String, nty: Type): Type = this match {
@@ -72,12 +87,11 @@ object Checker {
       case TyTuple(tys) =>
         TyTuple(tys.map(_.substTypeVar(name, nty)))
       case TyVar(tname) =>
-        if name == tname then
-          nty
-        else
-          this
+        if name == tname then nty else this
       case TyUniv(name, ty) =>
         TyUniv(name, ty.substTypeVar(name, nty))
+      case TyRecord(tys) =>
+        TyRecord(tys.map((n, ty) => (n, ty.substTypeVar(name, nty))))
     }
 
     // Returns whether or not the type is completely bound.
@@ -101,6 +115,8 @@ object Checker {
         // New type variables may be introduced, so they must be captured in the context
         // TODO: return an appropriate error
         if ctx.hasType(name) then false else ty.bound(ctx.addType(name))
+      case TyRecord(tys) =>
+        tys.foldLeft(true)((acc, field) => acc & field._2.bound(ctx))
     }
   }
 
@@ -221,6 +237,23 @@ object Checker {
           case _ => Left("illegal type application")
         }
       } yield nty
+    case Term.TmRecord(ts) =>
+      ts
+        .map(t => (t._1, typecheck(t._2, ctx)))
+        .foldRight[Either[String, List[RecordFieldType]]](Right(Nil))((e, acc) => acc match {
+          case Right(tys) => e._2.map(ty => (e._1 -> ty) :: tys)
+          case Left(_) => acc
+        })
+        .map(Type.TyRecord.apply)
+    case Term.TmRecordProj(t, f) =>
+      for {
+        ty  <- typecheck(t, ctx)
+        tty <- ty match {
+          case Type.TyRecord(fs) => Right(fs)
+          case _ => Left(s"left hand of tuple projection is not a record. $t: $ty")
+        }
+        pty <- tty.find(_._1 == f).fold(Left(s"record field $f does not exist"))(Right.apply)
+      } yield pty._2
   }
 
   def checkTermType(t: Term, ty: Type, ctx: TypingContext): Either[String, Unit] =

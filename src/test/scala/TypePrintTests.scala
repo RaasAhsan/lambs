@@ -34,4 +34,8 @@ class TypePrintTests extends AnyFunSuite with Matchers {
   test("TyUniv") {
     TyUniv("X", TyFunc(TyVar("X"), TyVar("X"))).printType shouldBe "(∀X. (X -> X))"
   }
+  
+  test("TyRecord") {
+    TyRecord(List("x" -> TyInt, "y" -> TyBool)).printType shouldBe "{x:Int,y:Bool}"
+  }
 }

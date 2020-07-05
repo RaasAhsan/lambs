@@ -11,7 +11,6 @@ enum ParseTerm derives Eql {
   // repeat syntactic forms from Term
   // TODO: is there a better way to avoid repetition? maybe a type parameter
   case ParseVar(name: String)
-  // TODO: remove VarBinding once there is a TranslateContext for external terms
   case ParseAbs(name: String, ty: Type, t: ParseTerm)
   case ParseApp(t1: ParseTerm, t2: ParseTerm)
   case ParseInt(x: Int)

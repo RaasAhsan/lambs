@@ -175,4 +175,19 @@ class TypeCheckTests extends AnyFunSuite with Matchers {
     val t = TmTyApp(TmTyAbs("X", TmAbs("x", TyVar("X"), TmVar("x"))), TyInt)
     typecheck(t, ctx) shouldBe Right(TyFunc(TyInt, TyInt))
   }
+  
+  test("TmRecord types to TyRecord") {
+    val t = TmRecord(List("x" -> TmInt(10), "y" -> TmTrue))
+    typecheck(t, ctx) shouldBe Right(TyRecord(List("x" -> TyInt, "y" -> TyBool)))
+  }
+  
+  test("TmRecordProj types to projected field") {
+    val t = TmRecordProj(TmRecord(List("x" -> TmInt(10), "y" -> TmTrue)), "y")
+    typecheck(t, ctx) shouldBe Right(TyBool)
+  }
+  
+  test("TmRecordProj is ill-typed when projected field doesn't exist") {
+    val t = TmRecordProj(TmRecord(List("x" -> TmInt(10), "y" -> TmTrue)), "z")
+    typecheck(t, ctx) shouldBe a [TypeCheckFail]
+  }
 }
