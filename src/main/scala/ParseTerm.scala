@@ -31,6 +31,7 @@ enum ParseTerm derives Eql {
 
   // derived forms
   case ParseSeq(t1: ParseTerm, t2: ParseTerm)
+  case ParseAscribe(t: ParseTerm, ty: Type)
 
   import Term._
 
@@ -75,7 +76,10 @@ enum ParseTerm derives Eql {
     // only one pass for desugaring
     case ParseSeq(t1, t2) =>
       val (newCtx, name) = ctx.nextName
-      TmApp(Term.TmAbs(name, Type.TyUnit, t2.translate(newCtx)), t1.translate(newCtx))
+      TmApp(TmAbs(name, Type.TyUnit, t2.translate(newCtx)), t1.translate(newCtx))
+    case ParseAscribe(t, ty) =>
+      val (newCtx, name) = ctx.nextName
+      TmApp(TmAbs(name, ty, TmVar(name)), t.translate(newCtx))
   }
 }
 

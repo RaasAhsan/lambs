@@ -7,11 +7,12 @@ A playground for building a statically checked type system based on the lambda c
 I'm also using this playground as an opportunity to try out the Dotty compiler.
 
 ## Features
-1. First-class polymorphism
+1. System F first-class polymorphism
 2. Function abstraction and application
 3. Boolean and integer logic
 4. N-ary tuples
 5. Statements
+6. Let bindings
 
 ## TODO
 - user-defined nominal types
