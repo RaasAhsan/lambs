@@ -22,8 +22,13 @@ enum ParseTerm derives Eql {
   case ParseNot(t1: ParseTerm)
   case ParseIf(t1: ParseTerm, t2: ParseTerm, t3: ParseTerm)
   case ParseUnit
+  
   case ParseTuple(ts: List[ParseTerm])
   case ParseTupleProj(t: ParseTerm, idx: Int)
+  
+  case ParseRecord(rs: List[(String, ParseTerm)])
+  case ParseRecordProj(t: ParseTerm, l: String)
+    
   case ParseLet(name: String, t1: ParseTerm, t2: ParseTerm)
   case ParseTyAbs(name: String, t: ParseTerm)
   case ParseTyApp(t: ParseTerm, ty: Type)
@@ -70,6 +75,11 @@ enum ParseTerm derives Eql {
       TmTyAbs(name, t.translate(ctx))
     case ParseTyApp(t, ty) =>
       TmTyApp(t.translate(ctx), ty)
+
+    case ParseRecord(rs) =>
+      TmRecord(rs.map((name, tm) => (name, tm.translate(ctx))))
+    case ParseRecordProj(t, r) =>
+      TmRecordProj(t.translate(ctx), r)
 
     // desugar derived forms
     // only one pass for desugaring
