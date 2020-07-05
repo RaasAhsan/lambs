@@ -204,10 +204,7 @@ object Checker {
     case Term.TmTuple(ts) =>
       ts
         .map(t => typecheck(t, ctx))
-        .foldRight[Either[String, List[Type]]](Right(Nil))((e, acc) => acc match {
-          case Right(tys) => e.map(_ :: tys)
-          case Left(_) => acc
-        })
+        .sequenceEither
         .map(Type.TyTuple.apply)
     case Term.TmTupleProj(t, idx) =>
       for {
@@ -239,11 +236,8 @@ object Checker {
       } yield nty
     case Term.TmRecord(ts) =>
       ts
-        .map(t => (t._1, typecheck(t._2, ctx)))
-        .foldRight[Either[String, List[RecordFieldType]]](Right(Nil))((e, acc) => acc match {
-          case Right(tys) => e._2.map(ty => (e._1 -> ty) :: tys)
-          case Left(_) => acc
-        })
+        .map(t => typecheck(t._2, ctx).map((t._1, _)))
+        .sequenceEither
         .map(Type.TyRecord.apply)
     case Term.TmRecordProj(t, f) =>
       for {
@@ -264,5 +258,14 @@ object Checker {
       Right(())
     else
       Left(s"type mismatch: $ty1 ; $ty2")
+  
+  // This is the particular variant of sequence that we need
+  // but in general we would require Traverse over List
+  // and Applicative over Either.
+  def [A, B](xs: List[Either[A, B]]) sequenceEither =
+    xs.foldRight[Either[A, List[B]]](Right(Nil))((e, acc) => acc match {
+      case Right(ys) => e.map(_ :: ys)
+      case Left(_) => acc
+    })
 
 }

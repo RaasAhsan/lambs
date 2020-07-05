@@ -39,7 +39,6 @@ enum ParseTerm derives Eql {
 
   import Term._
 
-  // Introduce translate context?
   def translate(ctx: TranslateContext): Term = this match {
     case ParseVar(name) =>
       TmVar(name)

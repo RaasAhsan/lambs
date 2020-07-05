@@ -29,5 +29,5 @@ object Main {
     println(res)
     println(typecheck(selfApp, TypingContext()).toOption.get.printType)
   }
-  
+
 }
