@@ -3,6 +3,7 @@ object Checker {
   
   type RecordField = (String, Term)
   type RecordFieldType = (String, Type)
+  type CaseBranch = (String, String, Term)
   
   // Representation of the internal abstract syntax tree.
   // Type checking is performed on this structure.
@@ -19,6 +20,7 @@ object Checker {
     case TmNot(t1: Term)
     case TmIf(t1: Term, t2: Term, t3: Term)
     case TmUnit
+    case TmLet(name: String, t1: Term, t2: Term)
       
     // Compound terms / data aggregates
 
@@ -32,7 +34,11 @@ object Checker {
     case TmRecord(rs: List[RecordField])
     case TmRecordProj(t: Term, l: String)
 
-    case TmLet(name: String, t1: Term, t2: Term)
+    // the variant type must be annotated explicitly, otherwise
+    // we could not determine a unique type for the term
+    // e.g. T can inject into S+T, S+T+U, U+T, etc.
+    case TmVariant(l: String, t: Term, ty: Type)
+    case TmCase(t: Term, branches: List[CaseBranch])
 
     // Universal polymorphism aka parametric polymorphism
     // Define a generic function that behaves uniformly for all substitutions
@@ -49,6 +55,7 @@ object Checker {
     case TyTuple(tys: List[Type])
     // structural labeled records
     case TyRecord(tys: List[RecordFieldType])
+    case TyVariant(tys: List[(String, Type)])
 
     // Polymorphism
     case TyVar(name: String)
@@ -73,6 +80,10 @@ object Checker {
         val i = tys.map((name, ty) => s"$name:${ty.printType}").mkString(",")
         s"{$i}"
       }
+      case TyVariant(tys) => {
+        val i = tys.map((name, ty) => s"$name:${ty.printType}").mkString(",")
+        s"<$i>"
+      }
     }
 
     def substTypeVar(name: String, nty: Type): Type = this match {
@@ -92,6 +103,8 @@ object Checker {
         TyUniv(name, ty.substTypeVar(name, nty))
       case TyRecord(tys) =>
         TyRecord(tys.map((n, ty) => (n, ty.substTypeVar(name, nty))))
+      case TyVariant(tys) =>
+        TyVariant(tys.map((n, ty) => (n, ty.substTypeVar(name, nty))))
     }
 
     // Returns whether or not the type is completely bound.
@@ -117,6 +130,8 @@ object Checker {
         if ctx.hasType(name) then false else ty.bound(ctx.addType(name))
       case TyRecord(tys) =>
         tys.foldLeft(true)((acc, field) => acc & field._2.bound(ctx))
+      case TyVariant(tys) =>
+        tys.foldLeft(true)((acc, v) => acc & v._2.bound(ctx))
     }
   }
 
@@ -146,6 +161,7 @@ object Checker {
   
   // Each case arm captures an inference rule in the typing relation.
   // Premises are checked, and the return value reflects the conclusion.
+  // The implementation follows directly from the inversion lemma of the relation.
   def typecheck(term: Term, ctx: TypingContext): Either[String, Type] = term match {
     case Term.TmVar(name) =>
       ctx.getTerm(name).fold(Left(s"no type binding found for $name"))(Right.apply)
@@ -234,6 +250,7 @@ object Checker {
           case _ => Left("illegal type application")
         }
       } yield nty
+      
     case Term.TmRecord(ts) =>
       ts
         .map(t => typecheck(t._2, ctx).map((t._1, _)))
@@ -248,6 +265,36 @@ object Checker {
         }
         pty <- tty.find(_._1 == f).fold(Left(s"record field $f does not exist"))(Right.apply)
       } yield pty._2
+      
+    case Term.TmVariant(l, t, ty) =>
+      for {
+        vty <- ty match {
+          case Type.TyVariant(tys) => tys.find(_._1 == l).fold(Left(s"specified variant does not project"))(Right.apply)
+          case _ => Left("variant must be typed as a variant")
+        }
+        tty <- typecheck(t, ctx)
+        _   <- if tty == vty._2 then Right(()) else Left(s"term type $tty cannot project onto variant type $ty")
+      } yield ty
+    case Term.TmCase(t, branches) =>
+      for {
+        tty  <- typecheck(t, ctx)
+        vtys <- tty match {
+          case Type.TyVariant(tys) => Right(tys)
+          case _ => Left("case must match over a variant term")
+        }
+        _    <- if vtys.length == branches.length then Right(()) else Left("incorrect number of branches")
+        btys <- vtys.zip(branches).map((vty, b) => {
+          for {
+            _      <- if vty._1 == b._1 then Right(()) else Left(s"invalid case label; expected: ${vty._1}, found: ${b._1}")
+            newCtx <- ctx.getTerm(b._2).fold(Right(ctx.addTerm(b._2, vty._2)))(_ => Left(s"existing binding found for ${b._2}"))
+            bty    <- typecheck(b._3, newCtx)
+          } yield bty
+        }).sequenceEither
+        rty   <- btys.distinct match {
+          case ty :: Nil => Right(ty)
+          case _ => Left("case branch types must be equal")
+        }
+      } yield rty
   }
 
   def checkTermType(t: Term, ty: Type, ctx: TypingContext): Either[String, Unit] =

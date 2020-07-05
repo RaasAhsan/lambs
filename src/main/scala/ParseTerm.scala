@@ -28,6 +28,9 @@ enum ParseTerm derives Eql {
   
   case ParseRecord(rs: List[(String, ParseTerm)])
   case ParseRecordProj(t: ParseTerm, l: String)
+
+  case ParseVariant(l: String, t: ParseTerm, ty: Type)
+  case ParseCase(t: ParseTerm, branches: List[(String, String, ParseTerm)])
     
   case ParseLet(name: String, t1: ParseTerm, t2: ParseTerm)
   case ParseTyAbs(name: String, t: ParseTerm)
@@ -80,6 +83,11 @@ enum ParseTerm derives Eql {
     case ParseRecordProj(t, r) =>
       TmRecordProj(t.translate(ctx), r)
 
+    case ParseVariant(l, t, ty) =>
+      TmVariant(l, t.translate(ctx), ty)
+    case ParseCase(t, branches) =>
+      TmCase(t.translate(ctx), branches.map((l, n, t) => (l, n, t.translate(ctx))))
+      
     // desugar derived forms
     // only one pass for desugaring
     case ParseSeq(t1, t2) =>

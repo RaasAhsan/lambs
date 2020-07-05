@@ -12,14 +12,12 @@ I'm also using this playground as an opportunity to try out the Dotty compiler.
 3. Boolean and integer logic
 4. N-ary tuples
 5. Structural labeled records
-6. Statements
-7. Let bindings
+6. Structural labeled variants
+7. Statements
+8. Let bindings
 
 ## TODO
 - user-defined nominal types
-- records/structs
-- variants
 - arrays
 - mutability
-- type annotations
 - type inference/reconstruction
