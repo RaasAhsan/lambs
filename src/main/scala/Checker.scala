@@ -167,13 +167,13 @@ object Checker {
   def typecheck(term: Term, ctx: TypingContext): Either[TypeError, Type] = term match {
     case tm @ Term.TmVar(name) =>
       ctx.getTerm(name).fold(Left(VarBindingNotFound(tm)))(Right.apply)
-    case tm @ Term.TmAbs(name, ty, t) =>
+    case Term.TmAbs(name, ty, t) =>
       for {
-        newCtx <- ctx.getTerm(name).fold(Right(ctx.addTerm(name, ty)))(_ => Left(VarBindingExists(tm)))
+        newCtx <- ctx.getTerm(name).fold(Right(ctx.addTerm(name, ty)))(_ => Left(VarBindingExists(name)))
         // The declared type of the abstraction must be defined
         // For polymorphic types, they must be captured by the typing context
         // TODO: Another way to do this is to assert that all returned types are in the context
-        _ <- if ty.bound(ctx) then Right(()) else Left(OtherError(s"invalid function abstraction type"))
+        _ <- if ty.bound(ctx) then Right(()) else Left(InvalidFunctionAbsType(ty))
         ty2 <- typecheck(t, newCtx)
       } yield Type.TyFunc(ty, ty2)
     case Term.TmApp(t1, t2) =>
@@ -182,9 +182,9 @@ object Checker {
         ty2 <- typecheck(t2, ctx)
         fty <- ty1 match {
           case Type.TyFunc(fty1, fty2) => Right((fty1, fty2))
-          case _ => Left(OtherError(s"left hand of abstraction is not a function. $t2: $ty2"))
+          case _ => Left(AbsExpectedForApp(t1, ty1))
         }
-        _   <- if ty2 == fty._1 then Right(()) else Left(OtherError(s"type mismatch: applied function of type $ty1 to a term of type $ty2"))
+        _   <- if ty2 == fty._1 then Right(()) else Left(AppTypeMismatch(ty1, ty2))
       } yield fty._2
     case _: Term.TmInt =>
       Right(Type.TyInt)
@@ -229,19 +229,19 @@ object Checker {
         ty  <- typecheck(t, ctx)
         tty <- ty match {
           case Type.TyTuple(tys) => Right(tys)
-          case _ => Left(OtherError(s"left hand of tuple projection is not a tuple. $t: $ty"))
+          case _ => Left(TupleProjectionExpectsTuple(ty))
         }
-        pty <- tty.lift(idx).fold(Left(OtherError(s"tuple does not $idx index")))(Right.apply)
+        pty <- tty.lift(idx).fold(Left(InvalidTupleIndex()))(Right.apply)
       } yield pty
     case Term.TmLet(name, t1, t2) =>
       for {
         ty1    <- typecheck(t1, ctx)
-        newCtx <- ctx.getTerm(name).fold(Right(ctx.addTerm(name, ty1)))(_ => Left(OtherError(s"existing term binding found for $name")))
+        newCtx <- ctx.getTerm(name).fold(Right(ctx.addTerm(name, ty1)))(_ => Left(VarBindingExists(name)))
         ty2    <- typecheck(t2, newCtx)
       } yield ty2
     case Term.TmTyAbs(name, t) =>
       for {
-        newCtx <- if ctx.hasType(name) then Left(OtherError(s"existing type binding found for $name")) else Right(ctx.addType(name))
+        newCtx <- if ctx.hasType(name) then Left(TypeBindingExists(name)) else Right(ctx.addType(name))
         ty     <- typecheck(t, newCtx)
       } yield Type.TyUniv(name, ty)
     case Term.TmTyApp(t, ty) =>
@@ -249,7 +249,7 @@ object Checker {
         ty1 <- typecheck(t, ctx)
         nty <- ty1 match {
           case Type.TyUniv(name, ity) => Right(ity.substTypeVar(name, ty))
-          case _ => Left(OtherError("illegal type application"))
+          case _ => Left(TypeApplicationExpectsForall())
         }
       } yield nty
       
@@ -263,38 +263,38 @@ object Checker {
         ty  <- typecheck(t, ctx)
         tty <- ty match {
           case Type.TyRecord(fs) => Right(fs)
-          case _ => Left(OtherError(s"left hand of tuple projection is not a record. $t: $ty"))
+          case _ => Left(RecordProjectionExpectsRecord(ty))
         }
-        pty <- tty.find(_._1 == f).fold(Left(OtherError(s"record field $f does not exist")))(Right.apply)
+        pty <- tty.find(_._1 == f).fold(Left(RecordFieldNotFound(f)))(Right.apply)
       } yield pty._2
       
     case Term.TmVariant(l, t, ty) =>
       for {
         vty <- ty match {
-          case Type.TyVariant(tys) => tys.find(_._1 == l).fold(Left(OtherError(s"specified variant does not project")))(Right.apply)
-          case _ => Left(OtherError("variant must be typed as a variant"))
+          case Type.TyVariant(tys) => tys.find(_._1 == l).fold(Left(InvalidVariantLabel(l, ty)))(Right.apply)
+          case _ => Left(VariantTypeMismatch())
         }
         tty <- typecheck(t, ctx)
-        _   <- if tty == vty._2 then Right(()) else Left(OtherError(s"term type $tty cannot project onto variant type $ty"))
+        _   <- if tty == vty._2 then Right(()) else Left(VariantInjectionMismatch(tty, ty))
       } yield ty
     case Term.TmCase(t, branches) =>
       for {
         tty  <- typecheck(t, ctx)
         vtys <- tty match {
           case Type.TyVariant(tys) => Right(tys)
-          case _ => Left(OtherError("case must match over a variant term"))
+          case _ => Left(CaseExpectsVariant(tty))
         }
-        _    <- if vtys.length == branches.length then Right(()) else Left(OtherError("incorrect number of branches"))
+        _    <- if vtys.length == branches.length then Right(()) else Left(CaseBranchCountMismatch())
         btys <- vtys.zip(branches).map((vty, b) => {
           for {
-            _      <- if vty._1 == b._1 then Right(()) else Left(OtherError(s"invalid case label; expected: ${vty._1}, found: ${b._1}"))
-            newCtx <- ctx.getTerm(b._2).fold(Right(ctx.addTerm(b._2, vty._2)))(_ => Left(OtherError(s"existing binding found for ${b._2}")))
+            _      <- if vty._1 == b._1 then Right(()) else Left(CaseBranchExpectedLabel(vty._1, b._1))
+            newCtx <- ctx.getTerm(b._2).fold(Right(ctx.addTerm(b._2, vty._2)))(_ => Left(VarBindingExists(b._2)))
             bty    <- typecheck(b._3, newCtx)
           } yield bty
         }).sequenceEither
         rty   <- btys.distinct match {
           case ty :: Nil => Right(ty)
-          case _ => Left(OtherError("case branch types must be equal"))
+          case _ => Left(CaseBranchTypeMismatch())
         }
       } yield rty
   }
@@ -306,7 +306,7 @@ object Checker {
     if ty1 == ty2 then
       Right(())
     else
-      Left(OtherError(s"type mismatch: $ty1 ; $ty2"))
+      Left(TypeMismatch(ty1, ty2))
   
   // This is the particular variant of sequence that we need
   // but in general we would require Traverse over List
