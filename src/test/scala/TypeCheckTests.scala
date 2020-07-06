@@ -8,7 +8,7 @@ class TypeCheckTests extends AnyFunSuite with Matchers {
   import Type._
   
   val ctx = TypingContext() // empty context
-  type TypeCheckFail = Left[String, Unit]
+  type TypeCheckFail = Left[TypeError, Unit]
   
   // TODO: Introduce property-based tests
   
