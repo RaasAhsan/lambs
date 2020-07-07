@@ -247,6 +247,7 @@ object Checker {
     case Term.TmTyApp(t, ty) =>
       for {
         ty1 <- typecheck(t, ctx)
+        // the term t type checks for any valid type that it is applied to, no need to substitute terms
         nty <- ty1 match {
           case Type.TyUniv(name, ity) => Right(ity.substTypeVar(name, ty))
           case _ => Left(TypeApplicationExpectsForall())

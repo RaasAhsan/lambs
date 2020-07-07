@@ -149,7 +149,7 @@ class TypeCheckTests extends AnyFunSuite with Matchers {
     val t = TmTupleProj(TmInt(10), 0)
     typecheck(t, ctx) shouldBe a [TypeCheckFail]
   }
-  
+
   test("TmLet types to its body") {
     val t = TmLet("x", TmInt(10), TmAdd(TmVar("x"), TmInt(10)))
     typecheck(t, ctx) shouldBe Right(TyInt)
@@ -180,27 +180,27 @@ class TypeCheckTests extends AnyFunSuite with Matchers {
     val t = TmTyApp(TmTyAbs("X", TmAbs("x", TyVar("X"), TmVar("x"))), TyInt)
     typecheck(t, ctx) shouldBe Right(TyFunc(TyInt, TyInt))
   }
-  
+
   test("TmRecord types to TyRecord") {
     val t = TmRecord(List("x" -> TmInt(10), "y" -> TmTrue))
     typecheck(t, ctx) shouldBe Right(TyRecord(List("x" -> TyInt, "y" -> TyBool)))
   }
-  
+
   test("TmRecordProj types to projected field") {
     val t = TmRecordProj(TmRecord(List("x" -> TmInt(10), "y" -> TmTrue)), "y")
     typecheck(t, ctx) shouldBe Right(TyBool)
   }
-  
+
   test("TmRecordProj is ill-typed when projected field doesn't exist") {
     val t = TmRecordProj(TmRecord(List("x" -> TmInt(10), "y" -> TmTrue)), "z")
     typecheck(t, ctx) shouldBe a [TypeCheckFail]
   }
-  
+
   test("TmRecordProj is ill-typed if left-hand side is not a record") {
     val t = TmRecordProj(TmInt(10), "z")
     typecheck(t, ctx) shouldBe a [TypeCheckFail]
   }
-  
+
   test("TmVariant types to TyVariant") {
     val t = TmVariant("x", TmInt(10), TyVariant(List("x" -> TyInt, "y" -> TyBool)))
     typecheck(t, ctx) shouldBe Right(TyVariant(List("x" -> TyInt, "y" -> TyBool)))
@@ -215,7 +215,7 @@ class TypeCheckTests extends AnyFunSuite with Matchers {
     val t = TmVariant("x", TmTrue, TyVariant(List("x" -> TyInt, "y" -> TyBool)))
     typecheck(t, ctx) shouldBe a [TypeCheckFail]
   }
-  
+
   test("TmCase types to the type of all its branches") {
     val t = TmCase(
       TmVariant("x", TmInt(10), TyVariant(List("x" -> TyInt, "y" -> TyBool))),
@@ -231,7 +231,7 @@ class TypeCheckTests extends AnyFunSuite with Matchers {
     val t = TmCase(TmInt(10), List())
     typecheck(t, ctx) shouldBe a [TypeCheckFail]
   }
-  
+
   test("TmCase is ill-typed if branch types are different") {
     val t = TmCase(
       TmVariant("x", TmInt(10), TyVariant(List("x" -> TyInt, "y" -> TyBool))),
