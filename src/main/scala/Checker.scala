@@ -1,26 +1,28 @@
 
 object Checker {
-  
+
   type RecordField = (String, Term)
   type RecordFieldType = (String, Type)
   type CaseBranch = (String, String, Term)
   
   // Representation of the internal abstract syntax tree.
   // Type checking is performed on this structure.
-  enum Term derives Eql {
-    case TmVar(name: String)
-    case TmAbs(name: String, ty: Type, t: Term)
-    case TmApp(t1: Term, t2: Term)
-    case TmInt(x: Int)
-    case TmAdd(t1: Term, t2: Term)
-    case TmTrue
-    case TmFalse
-    case TmAnd(t1: Term, t2: Term)
-    case TmOr(t1: Term, t2: Term)
-    case TmNot(t1: Term)
-    case TmIf(t1: Term, t2: Term, t3: Term)
-    case TmUnit
-    case TmLet(name: String, t1: Term, t2: Term)
+  sealed abstract class Term
+
+  object Term {
+    final case class TmVar(name: String) extends Term
+    final case class TmAbs(name: String, ty: Type, t: Term) extends Term
+    final case class TmApp(t1: Term, t2: Term) extends Term
+    final case class TmInt(x: Int) extends Term
+    final case class TmAdd(t1: Term, t2: Term) extends Term
+    case object TmTrue extends Term
+    case object TmFalse extends Term
+    final case class TmAnd(t1: Term, t2: Term) extends Term
+    final case class TmOr(t1: Term, t2: Term) extends Term
+    final case class TmNot(t1: Term) extends Term
+    final case class TmIf(t1: Term, t2: Term, t3: Term) extends Term
+    case object TmUnit extends Term
+    final case class TmLet(name: String, t1: Term, t2: Term) extends Term
       
     // Compound terms / data aggregates
 
@@ -28,39 +30,26 @@ object Checker {
     // This is exactly what Scala does; TupleN classes are defined as part of the standard library
     // and the (x, y, ...) syntactic form is the target of desugaring.
     // Tuples as structural records might be infeasible because ordering of type elements is significant.
-    case TmTuple(ts: List[Term])
-    case TmTupleProj(t: Term, idx: Int)
+    final case class TmTuple(ts: List[Term]) extends Term
+    final case class TmTupleProj(t: Term, idx: Int) extends Term
 
-    case TmRecord(rs: List[RecordField])
-    case TmRecordProj(t: Term, l: String)
+    final case class TmRecord(rs: List[RecordField]) extends Term
+    final case class TmRecordProj(t: Term, l: String) extends Term
 
     // the variant type must be annotated explicitly, otherwise
     // we could not determine a unique type for the term
     // e.g. T can inject into S+T, S+T+U, U+T, etc.
-    case TmVariant(l: String, t: Term, ty: Type)
-    case TmCase(t: Term, branches: List[CaseBranch])
+    final case class TmVariant(l: String, t: Term, ty: Type) extends Term
+    final case class TmCase(t: Term, branches: List[CaseBranch]) extends Term
 
     // Universal polymorphism aka parametric polymorphism
     // Define a generic function that behaves uniformly for all substitutions
-    case TmTyAbs(name: String, t: Term)
-    case TmTyApp(t: Term, ty: Type)
+    final case class TmTyAbs(name: String, t: Term) extends Term
+    final case class TmTyApp(t: Term, ty: Type) extends Term
   }
-  
-  enum Type derives Eql {
-    case TyFunc(ty1: Type, ty2: Type)
-    case TyInt
-    case TyBool
-    case TyUnit
-      
-    case TyTuple(tys: List[Type])
-    // structural labeled records
-    case TyRecord(tys: List[RecordFieldType])
-    case TyVariant(tys: List[(String, Type)])
 
-    // Polymorphism
-    case TyVar(name: String)
-    case TyUniv(name: String, ty: Type)
-
+  sealed abstract class Type {
+    import Type._
     def printType: String = this match {
       case TyFunc(ty1, ty2) =>
         s"(${ty1.printType} -> ${ty2.printType})"
@@ -77,11 +66,11 @@ object Checker {
       case TyUniv(name, ty) =>
         s"(∀$name. ${ty.printType})"
       case TyRecord(tys) => {
-        val i = tys.map((name, ty) => s"$name:${ty.printType}").mkString(",")
+        val i = tys.map { case (name, ty) => s"$name:${ty.printType}" }.mkString(",")
         s"{$i}"
       }
       case TyVariant(tys) => {
-        val i = tys.map((name, ty) => s"$name:${ty.printType}").mkString(",")
+        val i = tys.map { case (name, ty) => s"$name:${ty.printType}" }.mkString(",")
         s"<$i>"
       }
     }
@@ -98,13 +87,13 @@ object Checker {
       case TyTuple(tys) =>
         TyTuple(tys.map(_.substTypeVar(name, nty)))
       case TyVar(tname) =>
-        if name == tname then nty else this
+        if (name == tname) nty else this
       case TyUniv(name, ty) =>
         TyUniv(name, ty.substTypeVar(name, nty))
       case TyRecord(tys) =>
-        TyRecord(tys.map((n, ty) => (n, ty.substTypeVar(name, nty))))
+        TyRecord(tys.map { case (n, ty) => (n, ty.substTypeVar(name, nty)) })
       case TyVariant(tys) =>
-        TyVariant(tys.map((n, ty) => (n, ty.substTypeVar(name, nty))))
+        TyVariant(tys.map { case (n, ty) => (n, ty.substTypeVar(name, nty)) })
     }
 
     // Returns whether or not the type is completely bound.
@@ -127,12 +116,28 @@ object Checker {
       case TyUniv(name, ty) =>
         // New type variables may be introduced, so they must be captured in the context
         // TODO: return an appropriate error
-        if ctx.hasType(name) then false else ty.bound(ctx.addType(name))
+        if (ctx.hasType(name)) false else ty.bound(ctx.addType(name))
       case TyRecord(tys) =>
         tys.foldLeft(true)((acc, field) => acc & field._2.bound(ctx))
       case TyVariant(tys) =>
         tys.foldLeft(true)((acc, v) => acc & v._2.bound(ctx))
     }
+  }
+
+  object Type {
+    final case class TyFunc(ty1: Type, ty2: Type) extends Type
+    case object TyInt extends Type
+    case object TyBool extends Type
+    case object TyUnit extends Type
+
+    final case class TyTuple(tys: List[Type]) extends Type
+    // structural labeled records
+    final case class TyRecord(tys: List[RecordFieldType]) extends Type
+    final case class TyVariant(tys: List[(String, Type)]) extends Type
+
+    // Polymorphism
+    final case class TyVar(name: String) extends Type
+    final case class TyUniv(name: String, ty: Type) extends Type
   }
 
   // A typing context holds assumptions about the types of free variables in a term,
@@ -166,14 +171,14 @@ object Checker {
   // The implementation follows directly from the inversion lemma of the relation.
   def typecheck(term: Term, ctx: TypingContext): Either[TypeError, Type] = term match {
     case tm @ Term.TmVar(name) =>
-      ctx.getTerm(name).fold(Left(VarBindingNotFound(tm)))(Right.apply)
+      ctx.getTerm(name).fold[Either[TypeError, Type]](Left(VarBindingNotFound(tm)))(Right.apply)
     case Term.TmAbs(name, ty, t) =>
       for {
-        newCtx <- ctx.getTerm(name).fold(Right(ctx.addTerm(name, ty)))(_ => Left(VarBindingExists(name)))
+        newCtx <- ctx.getTerm(name).fold[Either[TypeError, TypingContext]](Right(ctx.addTerm(name, ty)))(_ => Left(VarBindingExists(name)))
         // The declared type of the abstraction must be defined
         // For polymorphic types, they must be captured by the typing context
         // TODO: Another way to do this is to assert that all returned types are in the context
-        _ <- if ty.bound(ctx) then Right(()) else Left(InvalidFunctionAbsType(ty))
+        _ <- if (ty.bound(ctx)) Right(()) else Left(InvalidFunctionAbsType(ty))
         ty2 <- typecheck(t, newCtx)
       } yield Type.TyFunc(ty, ty2)
     case Term.TmApp(t1, t2) =>
@@ -184,7 +189,7 @@ object Checker {
           case Type.TyFunc(fty1, fty2) => Right((fty1, fty2))
           case _ => Left(AbsExpectedForApp(t1, ty1))
         }
-        _   <- if ty2 == fty._1 then Right(()) else Left(AppTypeMismatch(ty1, ty2))
+        _   <- if (ty2 == fty._1) Right(()) else Left(AppTypeMismatch(ty1, ty2))
       } yield fty._2
     case _: Term.TmInt =>
       Right(Type.TyInt)
@@ -231,17 +236,17 @@ object Checker {
           case Type.TyTuple(tys) => Right(tys)
           case _ => Left(TupleProjectionExpectsTuple(ty))
         }
-        pty <- tty.lift(idx).fold(Left(InvalidTupleIndex()))(Right.apply)
+        pty <- tty.lift(idx).fold[Either[TypeError, Type]](Left(InvalidTupleIndex()))(Right.apply)
       } yield pty
     case Term.TmLet(name, t1, t2) =>
       for {
         ty1    <- typecheck(t1, ctx)
-        newCtx <- ctx.getTerm(name).fold(Right(ctx.addTerm(name, ty1)))(_ => Left(VarBindingExists(name)))
+        newCtx <- ctx.getTerm(name).fold[Either[TypeError, TypingContext]](Right(ctx.addTerm(name, ty1)))(_ => Left(VarBindingExists(name)))
         ty2    <- typecheck(t2, newCtx)
       } yield ty2
     case Term.TmTyAbs(name, t) =>
       for {
-        newCtx <- if ctx.hasType(name) then Left(TypeBindingExists(name)) else Right(ctx.addType(name))
+        newCtx <- if (ctx.hasType(name)) Left(TypeBindingExists(name)) else Right(ctx.addType(name))
         ty     <- typecheck(t, newCtx)
       } yield Type.TyUniv(name, ty)
     case Term.TmTyApp(t, ty) =>
@@ -266,17 +271,17 @@ object Checker {
           case Type.TyRecord(fs) => Right(fs)
           case _ => Left(RecordProjectionExpectsRecord(ty))
         }
-        pty <- tty.find(_._1 == f).fold(Left(RecordFieldNotFound(f)))(Right.apply)
+        pty <- tty.find(_._1 == f).fold[Either[TypeError, RecordFieldType]](Left(RecordFieldNotFound(f)))(Right.apply)
       } yield pty._2
       
     case Term.TmVariant(l, t, ty) =>
       for {
         vty <- ty match {
-          case Type.TyVariant(tys) => tys.find(_._1 == l).fold(Left(InvalidVariantLabel(l, ty)))(Right.apply)
+          case Type.TyVariant(tys) => tys.find(_._1 == l).fold[Either[TypeError, (String, Type)]](Left(InvalidVariantLabel(l, ty)))(Right.apply)
           case _ => Left(VariantTypeMismatch())
         }
         tty <- typecheck(t, ctx)
-        _   <- if tty == vty._2 then Right(()) else Left(VariantInjectionMismatch(tty, ty))
+        _   <- if (tty == vty._2) Right(()) else Left(VariantInjectionMismatch(tty, ty))
       } yield ty
     case Term.TmCase(t, branches) =>
       for {
@@ -285,14 +290,14 @@ object Checker {
           case Type.TyVariant(tys) => Right(tys)
           case _ => Left(CaseExpectsVariant(tty))
         }
-        _    <- if vtys.length == branches.length then Right(()) else Left(CaseBranchCountMismatch())
-        btys <- vtys.zip(branches).map((vty, b) => {
+        _    <- if (vtys.length == branches.length) Right(()) else Left(CaseBranchCountMismatch())
+        btys <- vtys.zip(branches).map { case (vty, b) => {
           for {
-            _      <- if vty._1 == b._1 then Right(()) else Left(CaseBranchExpectedLabel(vty._1, b._1))
-            newCtx <- ctx.getTerm(b._2).fold(Right(ctx.addTerm(b._2, vty._2)))(_ => Left(VarBindingExists(b._2)))
+            _      <- if (vty._1 == b._1) Right(()) else Left(CaseBranchExpectedLabel(vty._1, b._1))
+            newCtx <- ctx.getTerm(b._2).fold[Either[TypeError, TypingContext]](Right(ctx.addTerm(b._2, vty._2)))(_ => Left(VarBindingExists(b._2)))
             bty    <- typecheck(b._3, newCtx)
           } yield bty
-        }).sequenceEither
+        } }.sequenceEither
         rty   <- btys.distinct match {
           case ty :: Nil => Right(ty)
           case _ => Left(CaseBranchTypeMismatch())
@@ -304,7 +309,7 @@ object Checker {
     typecheck(t, ctx).flatMap(ty0 => typesMatch(ty0, ty))
 
   def typesMatch(ty1: Type, ty2: Type): Either[TypeError, Unit] =
-    if ty1 == ty2 then
+    if (ty1 == ty2)
       Right(())
     else
       Left(TypeMismatch(ty1, ty2))
@@ -312,10 +317,12 @@ object Checker {
   // This is the particular variant of sequence that we need
   // but in general we would require Traverse over List
   // and Applicative over Either.
-  def [A, B](xs: List[Either[A, B]]) sequenceEither =
-    xs.foldRight[Either[A, List[B]]](Right(Nil))((e, acc) => acc match {
-      case Right(ys) => e.map(_ :: ys)
-      case Left(_) => acc
-    })
+  implicit class ListEitherOps[A, B](xs: List[Either[A, B]]) {
+    def sequenceEither: Either[A, List[B]] =
+      xs.foldRight[Either[A, List[B]]](Right(Nil))((e, acc) => acc match {
+        case Right(ys) => e.map(_ :: ys)
+        case Left(_) => acc
+      })
+  }
 
 }

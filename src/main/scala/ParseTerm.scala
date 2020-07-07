@@ -7,39 +7,8 @@ import Checker.{Term, Type}
 // The benefit of doing this is that typing theorems are relations are also
 // derived from the primitive one.
 // If we wanted to write a parser for this language, it would target this AST.
-enum ParseTerm derives Eql {
-  // repeat syntactic forms from Term
-  // TODO: is there a better way to avoid repetition? maybe a type parameter
-  case ParseVar(name: String)
-  case ParseAbs(name: String, ty: Type, t: ParseTerm)
-  case ParseApp(t1: ParseTerm, t2: ParseTerm)
-  case ParseInt(x: Int)
-  case ParseAdd(t1: ParseTerm, t2: ParseTerm)
-  case ParseTrue
-  case ParseFalse
-  case ParseAnd(t1: ParseTerm, t2: ParseTerm)
-  case ParseOr(t1: ParseTerm, t2: ParseTerm)
-  case ParseNot(t1: ParseTerm)
-  case ParseIf(t1: ParseTerm, t2: ParseTerm, t3: ParseTerm)
-  case ParseUnit
-  
-  case ParseTuple(ts: List[ParseTerm])
-  case ParseTupleProj(t: ParseTerm, idx: Int)
-  
-  case ParseRecord(rs: List[(String, ParseTerm)])
-  case ParseRecordProj(t: ParseTerm, l: String)
-
-  case ParseVariant(l: String, t: ParseTerm, ty: Type)
-  case ParseCase(t: ParseTerm, branches: List[(String, String, ParseTerm)])
-    
-  case ParseLet(name: String, t1: ParseTerm, t2: ParseTerm)
-  case ParseTyAbs(name: String, t: ParseTerm)
-  case ParseTyApp(t: ParseTerm, ty: Type)
-
-  // derived forms
-  case ParseSeq(t1: ParseTerm, t2: ParseTerm)
-  case ParseAscribe(t: ParseTerm, ty: Type)
-
+sealed abstract class ParseTerm {
+  import ParseTerm._
   import Term._
 
   def translate(ctx: TranslateContext): Term = this match {
@@ -79,15 +48,15 @@ enum ParseTerm derives Eql {
       TmTyApp(t.translate(ctx), ty)
 
     case ParseRecord(rs) =>
-      TmRecord(rs.map((name, tm) => (name, tm.translate(ctx))))
+      TmRecord(rs.map{ case (name, tm) => (name, tm.translate(ctx))})
     case ParseRecordProj(t, r) =>
       TmRecordProj(t.translate(ctx), r)
 
     case ParseVariant(l, t, ty) =>
       TmVariant(l, t.translate(ctx), ty)
     case ParseCase(t, branches) =>
-      TmCase(t.translate(ctx), branches.map((l, n, t) => (l, n, t.translate(ctx))))
-      
+      TmCase(t.translate(ctx), branches.map { case (l, n, t) => (l, n, t.translate(ctx)) })
+
     // desugar derived forms
     // only one pass for desugaring
     case ParseSeq(t1, t2) =>
@@ -97,6 +66,40 @@ enum ParseTerm derives Eql {
       val (newCtx, name) = ctx.nextName
       TmApp(TmAbs(name, ty, TmVar(name)), t.translate(newCtx))
   }
+}
+
+object ParseTerm {
+  // repeat syntactic forms from Term
+  // TODO: is there a better way to avoid repetition? maybe a type parameter
+  final case class ParseVar(name: String) extends ParseTerm
+  final case class ParseAbs(name: String, ty: Type, t: ParseTerm) extends ParseTerm
+  final case class ParseApp(t1: ParseTerm, t2: ParseTerm) extends ParseTerm
+  final case class ParseInt(x: Int) extends ParseTerm
+  final case class ParseAdd(t1: ParseTerm, t2: ParseTerm) extends ParseTerm
+  case object ParseTrue extends ParseTerm
+  case object ParseFalse extends ParseTerm
+  final case class ParseAnd(t1: ParseTerm, t2: ParseTerm) extends ParseTerm
+  final case class ParseOr(t1: ParseTerm, t2: ParseTerm) extends ParseTerm
+  final case class ParseNot(t1: ParseTerm) extends ParseTerm
+  final case class ParseIf(t1: ParseTerm, t2: ParseTerm, t3: ParseTerm) extends ParseTerm
+  case object ParseUnit extends ParseTerm
+
+  final case class ParseTuple(ts: List[ParseTerm]) extends ParseTerm
+  final case class ParseTupleProj(t: ParseTerm, idx: Int) extends ParseTerm
+
+  final case class ParseRecord(rs: List[(String, ParseTerm)]) extends ParseTerm
+  final case class ParseRecordProj(t: ParseTerm, l: String) extends ParseTerm
+
+  final case class ParseVariant(l: String, t: ParseTerm, ty: Type) extends ParseTerm
+  final case class ParseCase(t: ParseTerm, branches: List[(String, String, ParseTerm)]) extends ParseTerm
+
+  final case class ParseLet(name: String, t1: ParseTerm, t2: ParseTerm) extends ParseTerm
+  final case class ParseTyAbs(name: String, t: ParseTerm) extends ParseTerm
+  final case class ParseTyApp(t: ParseTerm, ty: Type) extends ParseTerm
+
+  // derived forms
+  final case class ParseSeq(t1: ParseTerm, t2: ParseTerm) extends ParseTerm
+  final case class ParseAscribe(t: ParseTerm, ty: Type) extends ParseTerm
 }
 
 final case class TranslateContext(nameIndex: Int) {

@@ -44,7 +44,7 @@ object GenTerm {
   } yield TmAdd(t1, t2)
   
   def genIf: Gen[Term] = for {
-    t1 <- genInt
+    t1 <- genBool
     t2 <- genTerm
   } yield TmIf(t1, t2, t2)
   
